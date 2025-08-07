@@ -53,37 +53,33 @@
         return;
       }
 
-      // disable button to prevent repeats
       document.getElementById('connectBtn').disabled = true;
 
-      // create client
       client = new LoadBalancingClient(appId, appVer, ConnectionProtocol.Ws);
 
       client.onStateChange = state => {
         const name = LoadBalancingClient.StateToName(state);
         log('State: ' + name);
         if (state === StatusCode.Connect) {
-          log('✅ Connected – joining/creating room ' + roomName);
+          log('Connected – joining/creating room ' + roomName);
           client.joinOrCreateRoom(roomName, { maxPlayers: 4 });
         }
         if (state === StatusCode.Disconnect) {
-          log('❌ Disconnected');
+          log('Disconnected');
           clearInterval(serviceLoop);
         }
       };
 
       client.onJoinRoom = () => {
-        log(`🤖 Joined '${roomName}' as actor ${client.myActorNumber}`);
+        log(`Joined '${roomName}' as actor ${client.myActorNumber}`);
       };
 
       client.onError = (code, msg) => {
-        log(`⚠️ Error ${code}: ${msg}`);
+        log(`Error ${code}: ${msg}`);
       };
 
-      log('🌐 Connecting to Photon region ' + region + '...');
+      log('Connecting to Photon region ' + region + '...');
       client.connectToRegionMaster(region);
-
-      // start service loop
       serviceLoop = setInterval(() => client.service(), 1000/60);
     });
   </script>
