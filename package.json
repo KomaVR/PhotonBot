@@ -1,0 +1,10 @@
+{
+  "name": "photon-bot",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "photon-loadbalancing-ts": "^1.4.0"
+  }
+}
