@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photon Fake-Bot</title>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; background: #1e1e1e; color: #f0f0f0; }
+    label { display: block; margin: 0.5rem 0 0.2rem; }
+    input { width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; border: none; border-radius: 4px; }
+    button { padding: 0.6rem 1.2rem; border: none; border-radius: 4px; cursor: pointer; background: #007acc; color: #fff; }
+    #log { margin-top: 1rem; white-space: pre-wrap; background: #2e2e2e; padding: 0.5rem; height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>Photon Fake-Bot</h1>
+  <label for="appId">App ID</label>
+  <input id="appId" type="text" placeholder="YOUR_PHOTON_APP_ID">
+
+  <label for="appVer">App Version</label>
+  <input id="appVer" type="text" value="1.0">
+
+  <label for="region">Region</label>
+  <input id="region" type="text" value="us">
+
+  <label for="roomName">Room Name</label>
+  <input id="roomName" type="text" value="MyJSBotRoom">
+
+  <button id="connectBtn">Connect & Join Room</button>
+
+  <div id="log"></div>
+
+  <!-- Photon LoadBalancing TS SDK from CDN -->
+  <script src="https://unpkg.com/photon-loadbalancing-ts/dist/PhotonLoadBalancing.js"></script>
+  <script>
+    const { LoadBalancingClient, ConnectionProtocol, StatusCode } = Photon.LoadBalancing;
+    let client, serviceLoop;
+
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', () => {
+      const appId    = document.getElementById('appId').value.trim();
+      const appVer   = document.getElementById('appVer').value.trim();
+      const region   = document.getElementById('region').value.trim();
+      const roomName = document.getElementById('roomName').value.trim();
+
+      if (!appId || !roomName) {
+        alert('App ID and Room Name are required');
+        return;
+      }
+
+      // disable button to prevent repeats
+      document.getElementById('connectBtn').disabled = true;
+
+      // create client
+      client = new LoadBalancingClient(appId, appVer, ConnectionProtocol.Ws);
+
+      client.onStateChange = state => {
+        const name = LoadBalancingClient.StateToName(state);
+        log('State: ' + name);
+        if (state === StatusCode.Connect) {
+          log('✅ Connected – joining/creating room ' + roomName);
+          client.joinOrCreateRoom(roomName, { maxPlayers: 4 });
+        }
+        if (state === StatusCode.Disconnect) {
+          log('❌ Disconnected');
+          clearInterval(serviceLoop);
+        }
+      };
+
+      client.onJoinRoom = () => {
+        log(`🤖 Joined '${roomName}' as actor ${client.myActorNumber}`);
+      };
+
+      client.onError = (code, msg) => {
+        log(`⚠️ Error ${code}: ${msg}`);
+      };
+
+      log('🌐 Connecting to Photon region ' + region + '...');
+      client.connectToRegionMaster(region);
+
+      // start service loop
+      serviceLoop = setInterval(() => client.service(), 1000/60);
+    });
+  </script>
+</body>
+  </html>
+  
