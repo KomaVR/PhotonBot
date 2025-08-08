@@ -92,6 +92,14 @@
         text-align: center;
         color: #111827;
       }
+
+      /* Informational text, used to display room default or actual max players */
+      .info-text {
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+        text-align: center;
+      }
     </style>
   </head>
   <body>
@@ -125,6 +133,18 @@
         </select>
       </div>
 
+      <!-- Join/Create mode -->
+      <div class="form-group">
+        <label for="joinMode">Room Mode</label>
+        <select id="joinMode">
+          <option value="join" selected>Join existing room</option>
+          <option value="create">Create or join with custom settings</option>
+        </select>
+      </div>
+
+      <!-- Default max players info (shown when joining existing room) -->
+      <p id="defaultMaxPlayersInfo" class="info-text" style="display: none;">This game defaults to 10 players per room.</p>
+
       <!-- Room Name -->
       <div class="form-group">
         <label for="roomName">Room Name</label>
@@ -132,22 +152,28 @@
       </div>
 
       <!-- Max Players -->
-      <div class="form-group">
-        <label for="maxPlayers">Max Players</label>
-        <input id="maxPlayers" type="number" min="1" max="20" value="4">
-      </div>
-
-      <!-- Visibility -->
-      <div class="form-group">
-        <label>
-          <input id="isVisible" type="checkbox" checked> Make room visible
-        </label>
+      <!-- Custom settings (only visible when mode is set to create) -->
+      <div id="customSettings">
+        <div class="form-group">
+          <label for="maxPlayers">Max Players</label>
+          <input id="maxPlayers" type="number" min="1" max="20" value="4">
+        </div>
+        <div class="form-group">
+          <label>
+            <input id="isVisible" type="checkbox" checked> Make room visible
+          </label>
+        </div>
       </div>
 
       <button id="connectBtn" class="btn">Connect & Join Room</button>
+      <!-- Leave button appears after joining; allows client to leave the room and disconnect -->
+      <button id="leaveBtn" class="btn" style="background-color:#ef4444; display:none;">Leave Room</button>
 
       <!-- Player count display; hidden until connected and joined a room -->
       <div id="playerCountContainer" class="player-count" style="display: none;">Players in room: <span id="playerCount">0</span></div>
+
+      <!-- Room max players info; hidden until after joining a room. Updated dynamically -->
+      <p id="roomMaxPlayersInfo" class="info-text" style="display: none;"></p>
 
       <!-- Log output -->
       <div id="log" class="log-container" aria-label="Event Log"></div>
@@ -163,6 +189,26 @@
         logContainer.scrollTop = logContainer.scrollHeight;
       }
 
+      // Global variables to track the current Photon client and its service interval.
+      let currentClient = null;
+      let serviceIntervalId = null;
+
+      // Toggle visibility of custom settings based on selected room mode
+      (function setupModeToggle() {
+        const modeSelect = document.getElementById('joinMode');
+        const custom     = document.getElementById('customSettings');
+        const updateVisibility = function() {
+          if (modeSelect.value === 'create') {
+            custom.style.display = '';
+          } else {
+            custom.style.display = 'none';
+          }
+        };
+        updateVisibility();
+        modeSelect.addEventListener('change', updateVisibility);
+      })();
+
+      // Handle clicking the Connect button: establish a Photon client and join or create room.
       document.getElementById('connectBtn').addEventListener('click', function() {
         const appId    = document.getElementById('appId').value.trim();
         const appVer   = document.getElementById('appVer').value.trim() || '1.0';
@@ -170,10 +216,31 @@
         const roomName = document.getElementById('roomName').value.trim() || '1';
         const maxPlayers = parseInt(document.getElementById('maxPlayers').value, 10) || 4;
         const isVisible  = document.getElementById('isVisible').checked;
+        const joinMode = document.getElementById('joinMode').value;
 
         if (!appId) {
           appendLog('⚠️ Please provide a valid Photon App ID.');
           return;
+        }
+
+        // If there is an existing client connected, disconnect it cleanly before starting a new one.
+        if (currentClient) {
+          appendLog('🔄 Disconnecting existing client…');
+          try {
+            currentClient.disconnect();
+          } catch (e) {}
+          if (serviceIntervalId) {
+            clearInterval(serviceIntervalId);
+            serviceIntervalId = null;
+          }
+          currentClient = null;
+          // Hide the leave button and reset UI state since we’re starting fresh
+          const leaveBtn = document.getElementById('leaveBtn');
+          leaveBtn.style.display = 'none';
+          document.getElementById('connectBtn').style.display = 'block';
+          const playerCountContainer = document.getElementById('playerCountContainer');
+          playerCountContainer.style.display = 'none';
+          document.getElementById('roomMaxPlayersInfo').style.display = 'none';
         }
 
         appendLog('🔌 Connecting…');
@@ -181,37 +248,44 @@
         appendLog('App Version:', appVer);
         appendLog('Region:', region);
         appendLog('Room:', roomName);
-        appendLog('Max Players:', maxPlayers);
-        appendLog('Visible:', isVisible);
+        if (joinMode === 'create') {
+          appendLog('Max Players:', maxPlayers);
+          appendLog('Visible:', isVisible);
+        } else {
+          appendLog('Using default room settings (max players and visibility)');
+        }
 
-        // Destructure from Photon
         const { LoadBalancingClient, ConnectionProtocol, StatusCode } = Photon.LoadBalancing;
         const client = new LoadBalancingClient(appId, appVer, ConnectionProtocol.Ws);
-
-        // Grab player count elements so we can update them on join/leave
         const playerCountContainer = document.getElementById('playerCountContainer');
         const playerCountEl = document.getElementById('playerCount');
-
-        // Optionally set NickName or custom actor properties if needed
-        // client.myActorProperties = { userId: 'bot_' + Date.now() };
+        const roomMaxPlayersInfo = document.getElementById('roomMaxPlayersInfo');
 
         client.onStateChange = function(state) {
           appendLog('State changed →', LoadBalancingClient.StateToName(state));
           if (state === StatusCode.Connect) {
             appendLog('✅ Connected to region master. Joining room…');
-            // Flags bitmask: visible, cleanup cache on leave, create if not exists
-            const optionFlags = isVisible ? 0b00000111 : 0b00000110;
-            client.joinOrCreateRoom(roomName, {
-              maxPlayers: maxPlayers,
-              isVisible: isVisible
-            });
+            if (joinMode === 'create') {
+              client.joinOrCreateRoom(roomName, {
+                maxPlayers: maxPlayers,
+                isVisible: isVisible
+              });
+            } else {
+              client.joinRoom(roomName);
+            }
           }
           if (state === StatusCode.Disconnect) {
             appendLog('❌ Disconnected from Photon.');
-            // Hide player count when disconnected
-            if (playerCountContainer) {
-              playerCountContainer.style.display = 'none';
-              playerCountEl.textContent = '0';
+            playerCountContainer.style.display = 'none';
+            playerCountEl.textContent = '0';
+            roomMaxPlayersInfo.style.display = 'none';
+            roomMaxPlayersInfo.textContent = '';
+            document.getElementById('leaveBtn').style.display = 'none';
+            document.getElementById('connectBtn').style.display = 'block';
+            currentClient = null;
+            if (serviceIntervalId) {
+              clearInterval(serviceIntervalId);
+              serviceIntervalId = null;
             }
           }
         };
@@ -220,35 +294,63 @@
         };
         client.onJoinRoom = function() {
           appendLog('🎉 Joined room', roomName, 'as actor #', client.myActorNumber);
-          // Show and update player count when we join a room
-          if (playerCountContainer) {
-            const count = Object.keys(client.myRoomActors || {}).length;
-            playerCountEl.textContent = count;
-            playerCountContainer.style.display = 'block';
+          document.getElementById('leaveBtn').style.display = 'block';
+          document.getElementById('connectBtn').style.display = 'none';
+          const count = Object.keys(client.myRoomActors || {}).length;
+          playerCountEl.textContent = count;
+          playerCountContainer.style.display = 'block';
+          try {
+            const room = client.myRoom();
+            const maxPlayersValue = room && typeof room.maxPlayers === 'number' ? room.maxPlayers : 0;
+            if (maxPlayersValue > 0) {
+              roomMaxPlayersInfo.textContent = 'Max players allowed: ' + maxPlayersValue;
+            } else {
+              roomMaxPlayersInfo.textContent = 'No max players limit set for this game.';
+            }
+            roomMaxPlayersInfo.style.display = 'block';
+          } catch (e) {
+            roomMaxPlayersInfo.style.display = 'none';
+            roomMaxPlayersInfo.textContent = '';
           }
         };
         client.onActorJoin = function(actor) {
           appendLog('👤 Player joined:', actor.actorNr);
-          // Update player count when another player joins
-          if (playerCountContainer) {
-            const count = Object.keys(client.myRoomActors || {}).length;
-            playerCountEl.textContent = count;
-          }
+          const count = Object.keys(client.myRoomActors || {}).length;
+          playerCountEl.textContent = count;
         };
         client.onActorLeave = function(actor) {
           appendLog('👋 Player left:', actor.actorNr);
-          // Update player count when a player leaves
-          if (playerCountContainer) {
-            const count = Object.keys(client.myRoomActors || {}).length;
-            playerCountEl.textContent = count;
-          }
+          const count = Object.keys(client.myRoomActors || {}).length;
+          playerCountEl.textContent = count;
         };
 
         client.connectToRegionMaster(region);
-        // Pump service loop.  Use a faster interval to capture events promptly.
-        const serviceInterval = setInterval(function() {
+        serviceIntervalId = setInterval(function() {
           client.service();
         }, 50);
+        currentClient = client;
+      });
+
+      // Leave button: disconnect from Photon and reset UI
+      document.getElementById('leaveBtn').addEventListener('click', function() {
+        if (!currentClient) return;
+        appendLog('🚪 Leaving room…');
+        try {
+          currentClient.disconnect();
+        } catch (e) {}
+        if (serviceIntervalId) {
+          clearInterval(serviceIntervalId);
+          serviceIntervalId = null;
+        }
+        currentClient = null;
+        document.getElementById('leaveBtn').style.display = 'none';
+        document.getElementById('connectBtn').style.display = 'block';
+        document.getElementById('playerCountContainer').style.display = 'none';
+        document.getElementById('playerCount').textContent = '0';
+        const infoEl = document.getElementById('roomMaxPlayersInfo');
+        infoEl.style.display = 'none';
+        infoEl.textContent = '';
+        appendLog('✅ Left room and disconnected.');
       });
     </script>
   </body>
