@@ -1,55 +1,254 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
-    <title>Photon Bot</title>
-  </head>
-  <body>
-    <h1>Photon Bot</h1>
-    <input id="appId"  placeholder="App ID"      value="12166b2c-34e5-4b6e-8ae9-2cc5217f87cc">
-    <input id="appVer" placeholder="App Version" value="1.0">
-    <input id="region" placeholder="Region"      value="us">
-    <input id="roomName" placeholder="Room Name" value="1">
-    <button id="connect">Connect &amp; Join Room</button>
-    <pre id="log"></pre>
-
-    <script src="https://cdn.jsdelivr.net/npm/photon-javascript-sdk@1.0.0/lib/Photon-Javascript_SDK.min.js"></script>
-    <script>
-      function log(...args) {
-        document.getElementById('log').textContent += args.join(' ') + '\\n';
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photon Realtime Bot Client</title>
+    <style>
+      /* Simple, modern styling without relying on external frameworks */
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background-color: #f9fafb;
+        color: #1f2937;
+      }
+      .container {
+        max-width: 640px;
+        margin: 3rem auto;
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 2rem 2.5rem;
+      }
+      h1 {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        font-size: 1.75rem;
+        text-align: center;
+        color: #111827;
+      }
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 0.25rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .form-group input, .form-group select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 1rem;
+        color: #111827;
+        background-color: #ffffff;
+      }
+      .form-group input:focus, .form-group select:focus {
+        outline: none;
+        border-color: #6b7280;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+      }
+      .btn {
+        display: block;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
+        color: #ffffff;
+        background-color: #10b981; /* emerald-500 */
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        margin-top: 0.5rem;
+      }
+      .btn:hover {
+        background-color: #059669; /* emerald-600 */
+      }
+      .log-container {
+        margin-top: 1.5rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        background-color: #f3f4f6;
+        padding: 1rem;
+        height: 240px;
+        overflow-y: auto;
+        font-size: 0.875rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+      .log-container strong {
+        color: #111827;
       }
 
-      document.getElementById('connect').addEventListener('click', () => {
-        const appId   = document.getElementById('appId').value.trim();
-        const appVer  = document.getElementById('appVer').value.trim() || '1.0';
-        const region  = document.getElementById('region').value.trim() || 'us';
-        const room    = document.getElementById('roomName').value.trim() || '1';
-        log('Connecting…', '\\nApp ID:', appId, '\\nApp Version:', appVer, '\\nRegion:', region, '\\nRoom Name:', room);
+      .player-count {
+        margin-top: 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
+        color: #111827;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Photon Realtime Bot Client</h1>
+      <p style="margin-bottom: 1.5rem; text-align:center;">Enter your Photon credentials and room information. This client will connect to the Photon Cloud and join or create the specified room in the chosen region. It works with any Realtime game—you can adjust the room name and other parameters below.</p>
 
+      <!-- Application ID -->
+      <div class="form-group">
+        <label for="appId">Photon App ID</label>
+        <input id="appId" type="text" placeholder="Your Photon App ID" value="12166b2c-34e5-4b6e-8ae9-2cc5217f87cc">
+      </div>
+
+      <!-- App Version -->
+      <div class="form-group">
+        <label for="appVer">App Version</label>
+        <input id="appVer" type="text" placeholder="e.g. 1.0" value="1.0">
+      </div>
+
+      <!-- Region -->
+      <div class="form-group">
+        <label for="region">Region</label>
+        <select id="region">
+          <option value="us" selected>US</option>
+          <option value="eu">EU</option>
+          <option value="asia">Asia</option>
+          <option value="au">Australia</option>
+          <option value="jp">Japan</option>
+          <option value="sa">South America</option>
+          <option value="ru">Russia</option>
+        </select>
+      </div>
+
+      <!-- Room Name -->
+      <div class="form-group">
+        <label for="roomName">Room Name</label>
+        <input id="roomName" type="text" placeholder="Room name (create or join)" value="1">
+      </div>
+
+      <!-- Max Players -->
+      <div class="form-group">
+        <label for="maxPlayers">Max Players</label>
+        <input id="maxPlayers" type="number" min="1" max="20" value="4">
+      </div>
+
+      <!-- Visibility -->
+      <div class="form-group">
+        <label>
+          <input id="isVisible" type="checkbox" checked> Make room visible
+        </label>
+      </div>
+
+      <button id="connectBtn" class="btn">Connect & Join Room</button>
+
+      <!-- Player count display; hidden until connected and joined a room -->
+      <div id="playerCountContainer" class="player-count" style="display: none;">Players in room: <span id="playerCount">0</span></div>
+
+      <!-- Log output -->
+      <div id="log" class="log-container" aria-label="Event Log"></div>
+    </div>
+
+    <!-- Photon JS SDK via CDN.  For bundlers, you can import photon-loadbalancing-ts from your node_modules. -->
+    <script src="https://cdn.jsdelivr.net/npm/photon-javascript-sdk@1.0.0/lib/Photon-Javascript_SDK.min.js"></script>
+    <script>
+      // Utility: append messages to log container and auto-scroll to bottom
+      function appendLog() {
+        const logContainer = document.getElementById('log');
+        logContainer.textContent += Array.from(arguments).join(' ') + '\n';
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+
+      document.getElementById('connectBtn').addEventListener('click', function() {
+        const appId    = document.getElementById('appId').value.trim();
+        const appVer   = document.getElementById('appVer').value.trim() || '1.0';
+        const region   = document.getElementById('region').value;
+        const roomName = document.getElementById('roomName').value.trim() || '1';
+        const maxPlayers = parseInt(document.getElementById('maxPlayers').value, 10) || 4;
+        const isVisible  = document.getElementById('isVisible').checked;
+
+        if (!appId) {
+          appendLog('⚠️ Please provide a valid Photon App ID.');
+          return;
+        }
+
+        appendLog('🔌 Connecting…');
+        appendLog('App ID:', appId);
+        appendLog('App Version:', appVer);
+        appendLog('Region:', region);
+        appendLog('Room:', roomName);
+        appendLog('Max Players:', maxPlayers);
+        appendLog('Visible:', isVisible);
+
+        // Destructure from Photon
         const { LoadBalancingClient, ConnectionProtocol, StatusCode } = Photon.LoadBalancing;
         const client = new LoadBalancingClient(appId, appVer, ConnectionProtocol.Ws);
 
-        client.onStateChange = state => {
-          log('Client state changed:', LoadBalancingClient.StateToName(state));
+        // Grab player count elements so we can update them on join/leave
+        const playerCountContainer = document.getElementById('playerCountContainer');
+        const playerCountEl = document.getElementById('playerCount');
+
+        // Optionally set NickName or custom actor properties if needed
+        // client.myActorProperties = { userId: 'bot_' + Date.now() };
+
+        client.onStateChange = function(state) {
+          appendLog('State changed →', LoadBalancingClient.StateToName(state));
           if (state === StatusCode.Connect) {
-            log('Connected to region master. Joining room…');
-            client.joinOrCreateRoom(room, { maxPlayers: 4 });
+            appendLog('✅ Connected to region master. Joining room…');
+            // Flags bitmask: visible, cleanup cache on leave, create if not exists
+            const optionFlags = isVisible ? 0b00000111 : 0b00000110;
+            client.joinOrCreateRoom(roomName, {
+              maxPlayers: maxPlayers,
+              isVisible: isVisible
+            });
           }
           if (state === StatusCode.Disconnect) {
-            log('Disconnected from Photon.');
+            appendLog('❌ Disconnected from Photon.');
+            // Hide player count when disconnected
+            if (playerCountContainer) {
+              playerCountContainer.style.display = 'none';
+              playerCountEl.textContent = '0';
+            }
           }
         };
-
-        client.onJoinRoom = () => {
-          log('Joined room', room, 'as actor #', client.myActorNumber);
+        client.onError = function(code, msg) {
+          appendLog('⚠️ Error', code + ':', msg);
         };
-
-        client.onError = (code, msg) => {
-          log('Photon error:', code, msg);
+        client.onJoinRoom = function() {
+          appendLog('🎉 Joined room', roomName, 'as actor #', client.myActorNumber);
+          // Show and update player count when we join a room
+          if (playerCountContainer) {
+            const count = Object.keys(client.myRoomActors || {}).length;
+            playerCountEl.textContent = count;
+            playerCountContainer.style.display = 'block';
+          }
+        };
+        client.onActorJoin = function(actor) {
+          appendLog('👤 Player joined:', actor.actorNr);
+          // Update player count when another player joins
+          if (playerCountContainer) {
+            const count = Object.keys(client.myRoomActors || {}).length;
+            playerCountEl.textContent = count;
+          }
+        };
+        client.onActorLeave = function(actor) {
+          appendLog('👋 Player left:', actor.actorNr);
+          // Update player count when a player leaves
+          if (playerCountContainer) {
+            const count = Object.keys(client.myRoomActors || {}).length;
+            playerCountEl.textContent = count;
+          }
         };
 
         client.connectToRegionMaster(region);
-        setInterval(() => client.service(), 100);
+        // Pump service loop.  Use a faster interval to capture events promptly.
+        const serviceInterval = setInterval(function() {
+          client.service();
+        }, 50);
       });
     </script>
   </body>
